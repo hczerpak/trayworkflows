@@ -19,11 +19,10 @@ object WorkflowActor {
 
   //messages
   case class Create(stepsCount: Int)            //creates new workflow
-  case class Created(id: String)
   case class Execute(id: String)                //creates new execution
   case class Executed(eid: String)
   case class Increment(id:String, eid: String)  //increments an execution by id & exId
-  case class Incremented(id:String, eid:String)
+  case class Incremented()
   case class Find(id:String, eid: String)       //gets an execution by id & exId
   case class FindResult(complete:Boolean)
 
@@ -43,7 +42,7 @@ class WorkflowActor(workflows: Cache[Workflow],
     case Create(stepsCount) =>
       val id = UUID.randomUUID().toString
       workflows.set(id, new Workflow(id, stepsCount))
-      sender ! Created(id)
+      sender ! id
 
     case Execute(id) =>
       workflows.get(id) match {
@@ -59,8 +58,8 @@ class WorkflowActor(workflows: Cache[Workflow],
         case Some(w) =>
           executions.get(eid) match {
             case Some(exec) if exec.currentStep < w.numberOfSteps - 1 =>
-              executions.set(eid, new WorkflowExecution(id, eid, exec.currentStep + 1))
-              sender ! Incremented(id, eid)
+              executions.set(eid, exec++)
+              sender ! Incremented
             case Some(_) => sender ! Invalid
             case None => sender ! Missing
           }

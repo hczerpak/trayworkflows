@@ -13,4 +13,6 @@ class WorkflowExecution(
                          val creationDate : LocalDateTime = LocalDateTime.now()) {
 
   require (currentStep >= 0)
+
+  def ++(): WorkflowExecution = new WorkflowExecution(workflowId, eid, currentStep + 1, creationDate)
 }

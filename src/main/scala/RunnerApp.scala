@@ -1,6 +1,6 @@
-import java.util.UUID
 import java.util.concurrent.TimeUnit
 
+import _root_.model.WorkflowActor._
 import _root_.model.{Workflow, WorkflowActor, WorkflowExecution}
 import akka.actor.{ActorRef, ActorSystem}
 import akka.event.{Logging, LoggingAdapter}
@@ -8,14 +8,13 @@ import akka.http.scaladsl.Http
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 import akka.http.scaladsl.model.ContentTypes.`application/json`
 import akka.http.scaladsl.model.StatusCodes._
-import akka.http.scaladsl.model.headers.`Content-Type`
+import akka.http.scaladsl.model.{HttpEntity, HttpResponse}
 import akka.http.scaladsl.server.Directives
 import akka.pattern.ask
 import akka.stream.{ActorMaterializer, Materializer}
 import akka.util.Timeout
 import cache.Cache
 import com.typesafe.config.{Config, ConfigFactory}
-import model.WorkflowActor.{Created => _, _}
 import spray.json.DefaultJsonProtocol
 
 import scala.concurrent.ExecutionContextExecutor
@@ -54,7 +53,7 @@ trait Service extends Directives with JsonSupport {
 
   implicit val materializer: Materializer
 
-  implicit def requestTimeout = Timeout(Duration(50, TimeUnit.MILLISECONDS))
+  implicit def requestTimeout = Timeout(Duration(1, TimeUnit.SECONDS))
 
   val logger: LoggingAdapter
 
@@ -69,11 +68,12 @@ trait Service extends Directives with JsonSupport {
         post {
           entity(as[CreateRequest]) { request =>
             val steps = request.number_of_steps
-            val id = UUID.randomUUID().toString
-
-            respondWithHeaders(`Content-Type`(`application/json`)) {
-              complete {
-                (handler ? Create(steps)).map(_ => CreateResponse(id))
+            complete {
+              (handler ? Create(steps)).map { id =>
+                HttpResponse(
+                  status = Created,
+                  entity = HttpEntity(`application/json`, createResponseFormat.write(CreateResponse(id.toString)).toString)
+                )
               }
             }
           }
@@ -84,12 +84,13 @@ trait Service extends Directives with JsonSupport {
         val id = uid.toString
         pathEnd {
           post {
-            respondWithHeaders(`Content-Type`(`application/json`)) {
-              complete {
-                (handler ? Execute(id)).map {
-                  case Executed(x) => Created -> executeResponseFormat.write(ExecuteResponse(x)).toString
-                  case _ => NotFound -> ""
-                }
+            complete {
+              (handler ? Execute(id)).map {
+                case Executed(x) => HttpResponse(
+                  status = Created,
+                  entity = HttpEntity(`application/json`, executeResponseFormat.write(ExecuteResponse(x)).toString)
+                )
+                case _ => HttpResponse(status = NotFound)
               }
             }
           }
@@ -99,26 +100,27 @@ trait Service extends Directives with JsonSupport {
         val id = uid.toString
         val eid = euid.toString
         put {
-          //try to find the execution and increment or fail
           complete {
             (handler ? Increment(id, eid)).map {
-              case Incremented => NoContent -> ""
-              case Missing => NotFound -> ""
-              case _ => BadRequest -> ""
+              case Incremented => HttpResponse(status = NoContent)
+              case Missing => HttpResponse(status = NotFound)
+              case _ => HttpResponse(status = BadRequest)
             }
           }
-        }
-        get {
-          respondWithHeaders(`Content-Type`(`application/json`)) {
+        } ~
+          get {
             complete {
               (handler ? Find(id.toString, eid)).map {
-                case FindResult(complete) => OK -> findResponseFormat.write(FindResponse(complete)).toString()
-                case Missing => NotFound -> ""
-                case _ => BadRequest -> ""
+                case FindResult(complete) => HttpResponse(
+                  status = OK,
+                  entity = HttpEntity(`application/json`, findResponseFormat.write(FindResponse(complete)).toString)
+                )
+                case Missing => HttpResponse(status = NotFound)
+                case _ => HttpResponse(status = BadRequest)
               }
+
             }
           }
-        }
       }
 }
 

@@ -1,8 +1,7 @@
-import java.time.LocalDateTime
 import java.util.UUID
 
-import akka.http.scaladsl.model.StatusCodes._
 import akka.http.scaladsl.model.ContentTypes._
+import akka.http.scaladsl.model.StatusCodes._
 import model.WorkflowActor.Find
 import model.{Workflow, WorkflowExecution}
 
@@ -11,19 +10,17 @@ import scala.util.Random
 /**
   * Created by Hubert Czerpak on 17/04/2018
   * using 11" MacBook (can't see much on this screen).
-  */
-
-/**
+  *
   * Specs pt. 4
   */
-class FindExecution extends ApiSpecsDefaults {
+class FindExecutionSpec extends ApiSpecsDefaults {
 
   val id: String = UUID.randomUUID().toString
   val eid: String = UUID.randomUUID().toString
 
   val numberOfSteps = Random.nextInt(100) + 1
   workflows.set(id, new Workflow(id, numberOfSteps))
-  executions.set(eid, new WorkflowExecution(id, eid, numberOfSteps - 1, LocalDateTime.now()))
+  executions.set(eid, new WorkflowExecution(id, eid, numberOfSteps - 1))
 
   "GET /workflows/<workflow_id>/executions/<workflow_execution_id>" should "return: 200 OK" in {
 
@@ -40,7 +37,7 @@ class FindExecution extends ApiSpecsDefaults {
   }
 
   it should "return false otherwise" in {
-    executions.set(eid, new WorkflowExecution(id, eid, 0, LocalDateTime.now()))
+    executions.set(eid, new WorkflowExecution(id, eid, 0))
     Get(s"/workflows/$id/executions/$eid", Find(id, eid)) ~> routes ~> check {
 
       status shouldBe OK
@@ -61,6 +58,7 @@ class FindExecution extends ApiSpecsDefaults {
   }
 
   it should "should be able to support several thousand of invocations per second" in {
-    fail("TODO: write scala meter benchmark")
+
+    //TODO: write scala meter benchmark
   }
 }
