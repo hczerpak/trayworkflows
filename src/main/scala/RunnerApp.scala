@@ -1,3 +1,4 @@
+import java.time.LocalDateTime
 import java.util.concurrent.TimeUnit
 
 import _root_.model.WorkflowActor._
@@ -47,20 +48,16 @@ trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
 
 trait Service extends Directives with JsonSupport {
 
-  implicit val system: ActorSystem
-
   implicit def executor: ExecutionContextExecutor
+  implicit def timeout = Timeout(Duration(1, TimeUnit.SECONDS))
 
+  implicit val system: ActorSystem
   implicit val materializer: Materializer
 
-  implicit def requestTimeout = Timeout(Duration(1, TimeUnit.SECONDS))
-
-  val logger: LoggingAdapter
-
   def config: Config
-
   def handler: ActorRef
 
+  val logger: LoggingAdapter
   val routes =
 
     pathPrefix("workflows") {
@@ -118,20 +115,47 @@ trait Service extends Directives with JsonSupport {
                 case Missing => HttpResponse(status = NotFound)
                 case _ => HttpResponse(status = BadRequest)
               }
-
             }
           }
       }
 }
 
-object TrayService extends App with Service {
-  override implicit val system = ActorSystem()
-  override implicit val executor = system.dispatcher
-  override implicit val materializer = ActorMaterializer()
+/**
+  * A mixin which runs a periodic nonblocking background job every 1 minute to remove workflow executions that are
+  * finished and older than 1 minute.
+  */
+trait WorkflowExecutionEviction {
+
+  implicit val system: ActorSystem
+  implicit val workflows: Cache[Workflow]
+  implicit val workflowExecutions: Cache[WorkflowExecution]
+
+  implicit def executor: ExecutionContextExecutor
+
+  def isOlderThanOneMinute(exec: WorkflowExecution): Boolean = exec.creationDate.plusMinutes(1).isBefore(LocalDateTime.now())
+
+  def evictionPredicate: WorkflowExecution => Boolean = exec => {
+    workflows.get(exec.workflowId) match {
+      case Some(w) if exec.currentStep < w.numberOfSteps - 1 => isOlderThanOneMinute(exec)
+      case _ => true
+    }
+  }
+
+  private val oneSec = Duration(1, TimeUnit.SECONDS)
+  system.scheduler.schedule(oneSec, oneSec) { workflowExecutions.removeAllIf(evictionPredicate) }
+}
+
+object TrayService extends App with Service with WorkflowExecutionEviction {
+  override implicit val system              = ActorSystem()
+  override implicit val executor            = system.dispatcher
+  override implicit val materializer        = ActorMaterializer()
+  override implicit val workflows           = new Cache[Workflow]()
+  override implicit val workflowExecutions  = new Cache[WorkflowExecution]()
 
   override val config = ConfigFactory.load()
   override val logger = Logging(system, getClass)
-  val handler = system.actorOf(WorkflowActor.actorProps(new Cache[Workflow] {}, new Cache[WorkflowExecution] {}))
+
+  val handler = system.actorOf(WorkflowActor.actorProps(workflows, workflowExecutions))
 
   Http().bindAndHandle(routes, config.getString("http.interface"), config.getInt("http.port"))
 }

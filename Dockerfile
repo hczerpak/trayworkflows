@@ -1,6 +1,5 @@
 #
-# Scala and sbt Dockerfile
-#
+# Based on
 # https://github.com/hseeberger/scala-sbt
 #
 
@@ -32,6 +31,7 @@ RUN \
 
 # Define working directory
 RUN touch /usr/lib/jvm/java-8-openjdk-amd64/release
+
 WORKDIR /trayworkflows
 ADD . /trayworkflows
 
