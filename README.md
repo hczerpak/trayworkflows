@@ -4,10 +4,9 @@ My solution to tray.io Backend Engineering Technical Test (2016)
 ### Running with Docker (build & run)
 To build using docker use this:
 ```
-docker build -t hc/trayio https://github.com/hczerpak/trayworkflows.git
-```
-and then to run:
-```
+git clone https://github.com/hczerpak/trayworkflows.git
+cd trayworkflows
+docker build -t hc/trayio .
 docker run -p 9000:9000 hc/trayio
 ```
 
