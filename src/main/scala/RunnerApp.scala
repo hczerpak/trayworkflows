@@ -125,8 +125,6 @@ trait Service extends Directives with JsonSupport {
   * finished and older than 1 minute.
   */
 trait WorkflowExecutionEviction {
-
-  implicit val system: ActorSystem
   implicit val workflows: Cache[Workflow]
   implicit val workflowExecutions: Cache[WorkflowExecution]
 
@@ -140,9 +138,6 @@ trait WorkflowExecutionEviction {
       case _ => true
     }
   }
-
-  private val oneSec = Duration(1, TimeUnit.SECONDS)
-  system.scheduler.schedule(oneSec, oneSec) { workflowExecutions.removeAllIf(evictionPredicate) }
 }
 
 object TrayService extends App with Service with WorkflowExecutionEviction {
@@ -158,4 +153,7 @@ object TrayService extends App with Service with WorkflowExecutionEviction {
   val handler = system.actorOf(WorkflowActor.actorProps(workflows, workflowExecutions))
 
   Http().bindAndHandle(routes, config.getString("http.interface"), config.getInt("http.port"))
+
+  private val oneSec = Duration(1, TimeUnit.SECONDS)
+  system.scheduler.schedule(oneSec, oneSec) { workflowExecutions.removeAllIf(evictionPredicate) }
 }
